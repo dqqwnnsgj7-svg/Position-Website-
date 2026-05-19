@@ -207,7 +207,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const deleteSelected = async () => {
     setDeletingSelected(true);
     await Promise.all(
-      [...selectedIds].map((id) =>
+      Array.from(selectedIds).map((id) =>
         fetch(`/api/projects/${params.id}/candidates/${id}`, { method: 'DELETE' })
       )
     );
