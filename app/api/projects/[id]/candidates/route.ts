@@ -78,7 +78,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         try {
           const evaluation = await evaluateCandidate(
             resumeText,
-            project.description,
+            project.description!,
             project.title,
             project.customCriteria
           );
