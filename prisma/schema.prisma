@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String               @id @default(cuid())
+  email              String               @unique
+  password           String
+  name               String?
+  calendarPreference String?
+  createdAt          DateTime             @default(now())
+  projects           Project[]
+  resetTokens        PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Project {
+  id              String      @id @default(cuid())
+  title           String
+  description     String?
+  threshold       Int         @default(70)
+  interviewTarget Int?
+  openSlots       Int         @default(1)
+  customCriteria  String?
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  candidates      Candidate[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model Candidate {
+  id                 String    @id @default(cuid())
+  name               String?
+  email              String?
+  fileName           String
+  fileMimeType       String?
+  fileData           String?
+  resumeText         String
+  score              Int?
+  pros               String?
+  cons               String?
+  analysis           String?
+  interviewQuestions String?
+  label              String?
+  status             String    @default("pending")
+  cultureNotes       String?
+  rejectionEmail     String?
+  acceptanceMessage  String?
+  projectId          String
+  project            Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt          DateTime  @default(now())
+  evaluatedAt        DateTime?
+  deletedAt          DateTime?
+}
