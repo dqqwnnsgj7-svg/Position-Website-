@@ -8,7 +8,7 @@ async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 6): Promise<T> {
     } catch (err) {
       lastErr = err;
       const isRateLimit = err instanceof Anthropic.RateLimitError;
-      const isServerError = err instanceof Anthropic.APIError && err.status >= 500;
+      const isServerError = err instanceof Anthropic.APIError && (err.status ?? 0) >= 500;
       const isNetworkError = err instanceof Anthropic.APIConnectionError;
       if (!isRateLimit && !isServerError && !isNetworkError) throw err;
       const delaySecs = Math.min(2 ** attempt, 60);
