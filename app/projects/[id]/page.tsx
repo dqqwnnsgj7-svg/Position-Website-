@@ -91,30 +91,37 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    const BATCH_SIZE = 5;
     setUploadLoading(true);
     setUploadResults([]);
     setUploadProgress({ done: 0, total: files.length });
 
-    for (let i = 0; i < files.length; i += BATCH_SIZE) {
-      const batch = files.slice(i, i + BATCH_SIZE);
-      const formData = new FormData();
-      batch.forEach((f) => formData.append('resumes', f));
+    const CONCURRENCY = 3;
+    const pool = new Set<Promise<void>>();
 
+    const processFile = async (file: File) => {
+      const formData = new FormData();
+      formData.append('resumes', file);
       try {
         const res = await fetch(`/api/projects/${params.id}/candidates`, { method: 'POST', body: formData });
         const data = await res.json();
         if (!res.ok) {
-          setUploadResults((prev) => [...prev, ...batch.map((f) => ({ fileName: f.name, error: data.error || 'Upload failed' }))]);
+          setUploadResults((prev) => [...prev, { fileName: file.name, error: data.error || 'Upload failed' }]);
         } else {
           setUploadResults((prev) => [...prev, ...data.results]);
         }
       } catch {
-        setUploadResults((prev) => [...prev, ...batch.map((f) => ({ fileName: f.name, error: 'Network error' }))]);
+        setUploadResults((prev) => [...prev, { fileName: file.name, error: 'Network error' }]);
       }
+      setUploadProgress((prev) => prev ? { done: prev.done + 1, total: prev.total } : null);
+    };
 
-      setUploadProgress({ done: Math.min(i + BATCH_SIZE, files.length), total: files.length });
+    for (const file of files) {
+      const task = processFile(file);
+      const entry: Promise<void> = task.finally(() => pool.delete(entry));
+      pool.add(entry);
+      if (pool.size >= CONCURRENCY) await Promise.race(pool);
     }
+    await Promise.all(pool);
 
     await fetchProject();
     setUploadLoading(false);

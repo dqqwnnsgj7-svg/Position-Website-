@@ -167,24 +167,24 @@ export async function splitResumes(text: string): Promise<string[]> {
   if (!apiKey) return [text];
   const client = new Anthropic({ apiKey });
 
+  // Ask only for short anchor strings (first 60 chars of each resume).
+  // Avoids hitting token limits that plagued the full-text-reproduction approach.
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 8192,
+    max_tokens: 512,
     messages: [{
       role: 'user',
-      content: `This PDF may contain one resume or multiple resumes merged into a single document.
+      content: `This document may contain multiple resumes merged together.
 
-Analyze the document and respond with ONLY a valid JSON array of strings. Each string must be the complete text of one individual resume. If the document contains only one resume, return a single-element array.
+If you can identify multiple distinct resumes, respond with a JSON array of anchor strings — copy the first 60 characters verbatim (exactly as they appear in the document) from the beginning of each resume, in order.
+If there is only one resume, respond with: ["SINGLE"]
 
 Rules:
-- Do NOT summarize or shorten the resume text — reproduce each resume's content in full
-- Preserve all contact info, work history, education, and skills sections
-- If you cannot clearly identify multiple distinct resumes, return a single-element array with the original text
+- Each anchor must be a verbatim substring copied from the document
+- No explanations — just the JSON array
 
-Example (two resumes): ["Jane Smith\\n555-1234\\njane@email.com\\n...", "John Doe\\n555-5678\\njohn@email.com\\n..."]
-
-DOCUMENT:
-${text.slice(0, 24000)}`,
+DOCUMENT (first 8000 chars):
+${text.slice(0, 8000)}`,
     }],
   });
 
@@ -193,12 +193,29 @@ ${text.slice(0, 24000)}`,
   if (!match) return [text];
 
   try {
-    const parsed = JSON.parse(match[0]);
-    if (Array.isArray(parsed) && parsed.length > 0 && parsed.every((s: unknown) => typeof s === 'string' && s.trim().length > 0)) {
-      return parsed;
+    const anchors: unknown[] = JSON.parse(match[0]);
+    if (!Array.isArray(anchors) || anchors.length === 0) return [text];
+    if (anchors.length === 1) return [text]; // covers "SINGLE" and single-anchor cases
+
+    const positions: number[] = [];
+    for (const anchor of anchors) {
+      if (typeof anchor !== 'string') return [text];
+      const pos = text.indexOf(anchor.trim().slice(0, 60));
+      if (pos === -1) return [text];
+      positions.push(pos);
     }
+
+    positions.sort((a, b) => a - b);
+
+    const resumes: string[] = [];
+    for (let i = 0; i < positions.length; i++) {
+      const slice = text.slice(positions[i], positions[i + 1] ?? text.length).trim();
+      if (slice.length > 0) resumes.push(slice);
+    }
+
+    if (resumes.length >= 2) return resumes;
   } catch {
-    // fall through to single-resume fallback
+    // fall through
   }
 
   return [text];

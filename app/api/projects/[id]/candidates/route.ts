@@ -57,7 +57,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       let resumeTexts: string[];
       if (isPdf) {
         const { text, numPages } = await parsePdf(buffer);
-        resumeTexts = numPages > 2 ? await splitResumes(text) : [text];
+        resumeTexts = numPages >= 2 ? await splitResumes(text) : [text];
       } else {
         resumeTexts = [await parseFile(buffer, file.type, file.name)];
       }
