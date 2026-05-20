@@ -12,7 +12,8 @@ async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 6): Promise<T> {
       const isNetworkError = err instanceof Anthropic.APIConnectionError;
       if (!isRateLimit && !isServerError && !isNetworkError) throw err;
       const delaySecs = Math.min(2 ** attempt, 60);
-      console.warn(`[evaluate] attempt ${attempt + 1} failed (${(err as Anthropic.APIError).status ?? 'network'}), retrying in ${delaySecs}s…`);
+      const errCode = err instanceof Anthropic.APIError ? err.status : 'network';
+      console.warn(`[evaluate] attempt ${attempt + 1} failed (${errCode}), retrying in ${delaySecs}s…`);
       await new Promise(r => setTimeout(r, delaySecs * 1000));
     }
   }
