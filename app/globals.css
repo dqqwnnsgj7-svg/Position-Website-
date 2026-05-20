@@ -268,3 +268,30 @@ textarea.input {
   border-top: 1px solid var(--border);
   margin: 0;
 }
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.progress-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes indeterminate {
+  0%   { left: -40%; width: 40%; }
+  60%  { left: 100%; width: 40%; }
+  100% { left: 100%; width: 40%; }
+}
+
+.progress-indeterminate {
+  position: absolute;
+  top: 0; bottom: 0;
+  background: var(--accent);
+  border-radius: 9999px;
+  animation: indeterminate 1.6s ease-in-out infinite;
+  opacity: 0.7;
+}

@@ -167,55 +167,70 @@ export async function splitResumes(text: string): Promise<string[]> {
   if (!apiKey) return [text];
   const client = new Anthropic({ apiKey });
 
-  // Ask only for short anchor strings (first 60 chars of each resume).
-  // Avoids hitting token limits that plagued the full-text-reproduction approach.
+  const lines = text.split('\n');
+  // Send up to 300 numbered lines so Claude can return line numbers (not full text).
+  // Line-number splitting is robust to whitespace differences that break anchor matching.
+  const numberedSample = lines.slice(0, 300).map((l, i) => `${i + 1}: ${l}`).join('\n');
+
+  console.log(`[splitResumes] input: ${lines.length} lines, ${text.length} chars`);
+
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 512,
+    max_tokens: 256,
     messages: [{
       role: 'user',
-      content: `This document may contain multiple resumes merged together.
+      content: `The numbered document below may contain multiple resumes merged into one file.
 
-If you can identify multiple distinct resumes, respond with a JSON array of anchor strings — copy the first 60 characters verbatim (exactly as they appear in the document) from the beginning of each resume, in order.
-If there is only one resume, respond with: ["SINGLE"]
+Return a JSON array of the 1-based line numbers where each distinct resume begins.
+If there is only one resume, return: [1]
 
-Rules:
-- Each anchor must be a verbatim substring copied from the document
-- No explanations — just the JSON array
+No explanations — only the JSON array of integers.
 
-DOCUMENT (first 8000 chars):
-${text.slice(0, 8000)}`,
+DOCUMENT:
+${numberedSample}`,
     }],
   });
 
   const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
-  const match = responseText.match(/\[[\s\S]*\]/);
-  if (!match) return [text];
+  console.log('[splitResumes] Claude raw response:', responseText);
+
+  // Match the first JSON array of numbers in the response
+  const match = responseText.match(/\[\s*\d[\d\s,]*\]/);
+  if (!match) {
+    console.log('[splitResumes] no integer array found, returning single resume');
+    return [text];
+  }
 
   try {
-    const anchors: unknown[] = JSON.parse(match[0]);
-    if (!Array.isArray(anchors) || anchors.length === 0) return [text];
-    if (anchors.length === 1) return [text]; // covers "SINGLE" and single-anchor cases
+    const lineNums: unknown[] = JSON.parse(match[0]);
+    console.log('[splitResumes] parsed line numbers:', lineNums);
 
-    const positions: number[] = [];
-    for (const anchor of anchors) {
-      if (typeof anchor !== 'string') return [text];
-      const pos = text.indexOf(anchor.trim().slice(0, 60));
-      if (pos === -1) return [text];
-      positions.push(pos);
+    if (!Array.isArray(lineNums) || lineNums.length <= 1) {
+      console.log('[splitResumes] single resume detected');
+      return [text];
     }
 
-    positions.sort((a, b) => a - b);
+    const validNums = (lineNums as number[])
+      .filter((n) => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= lines.length)
+      .sort((a, b) => a - b);
+
+    console.log('[splitResumes] valid sorted starts:', validNums);
+
+    if (validNums.length <= 1) return [text];
 
     const resumes: string[] = [];
-    for (let i = 0; i < positions.length; i++) {
-      const slice = text.slice(positions[i], positions[i + 1] ?? text.length).trim();
-      if (slice.length > 0) resumes.push(slice);
+    for (let i = 0; i < validNums.length; i++) {
+      const startLine = validNums[i] - 1; // convert to 0-indexed
+      const endLine = i + 1 < validNums.length ? validNums[i + 1] - 1 : lines.length;
+      const slice = lines.slice(startLine, endLine).join('\n').trim();
+      console.log(`[splitResumes] resume ${i + 1}: lines ${validNums[i]}–${endLine}, ${slice.length} chars`);
+      if (slice.length > 50) resumes.push(slice);
     }
 
+    console.log(`[splitResumes] final count: ${resumes.length}`);
     if (resumes.length >= 2) return resumes;
-  } catch {
-    // fall through
+  } catch (err) {
+    console.error('[splitResumes] parse error:', err);
   }
 
   return [text];

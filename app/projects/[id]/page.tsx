@@ -91,6 +91,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
+    console.log(`[handleUpload] starting: ${files.length} file(s)`);
     setUploadLoading(true);
     setUploadResults([]);
     setUploadProgress({ done: 0, total: files.length });
@@ -99,20 +100,28 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     const pool = new Set<Promise<void>>();
 
     const processFile = async (file: File) => {
+      console.log(`[handleUpload] starting file: ${file.name}`);
       const formData = new FormData();
       formData.append('resumes', file);
       try {
         const res = await fetch(`/api/projects/${params.id}/candidates`, { method: 'POST', body: formData });
         const data = await res.json();
         if (!res.ok) {
+          console.log(`[handleUpload] error for ${file.name}:`, data.error);
           setUploadResults((prev) => [...prev, { fileName: file.name, error: data.error || 'Upload failed' }]);
         } else {
+          console.log(`[handleUpload] success for ${file.name}:`, data.results);
           setUploadResults((prev) => [...prev, ...data.results]);
         }
-      } catch {
+      } catch (err) {
+        console.error(`[handleUpload] network error for ${file.name}:`, err);
         setUploadResults((prev) => [...prev, { fileName: file.name, error: 'Network error' }]);
       }
-      setUploadProgress((prev) => prev ? { done: prev.done + 1, total: prev.total } : null);
+      setUploadProgress((prev) => {
+        const next = prev ? { done: prev.done + 1, total: prev.total } : null;
+        console.log(`[handleUpload] progress update →`, next);
+        return next;
+      });
     };
 
     for (const file of files) {
@@ -123,6 +132,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     }
     await Promise.all(pool);
 
+    console.log('[handleUpload] all files done, refreshing project');
     await fetchProject();
     setUploadLoading(false);
     setUploadProgress(null);
@@ -290,18 +300,24 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                 <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                  {uploadProgress.done} of {uploadProgress.total} evaluated
+                  {uploadProgress.done} of {uploadProgress.total} file{uploadProgress.total !== 1 ? 's' : ''} submitted
                 </span>
                 <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--accent)' }}>
-                  {Math.round((uploadProgress.done / uploadProgress.total) * 100)}%
+                  {uploadProgress.done === 0 ? 'analyzing…' : `${Math.round((uploadProgress.done / uploadProgress.total) * 100)}%`}
                 </span>
               </div>
-              <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 9999, overflow: 'hidden' }}>
+              <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 9999, overflow: 'hidden', position: 'relative' }}>
+                {/* filled bar — only meaningful when done > 0 */}
                 <div style={{
-                  height: '100%', background: 'var(--accent)', borderRadius: 9999,
+                  position: 'absolute', top: 0, left: 0, bottom: 0,
+                  background: 'var(--accent)', borderRadius: 9999,
                   width: `${(uploadProgress.done / uploadProgress.total) * 100}%`,
                   transition: 'width 500ms ease',
                 }} />
+                {/* indeterminate bounce when nothing has completed yet */}
+                {uploadProgress.done === 0 && <div className="progress-indeterminate" />}
+                {/* shimmer sweep always active */}
+                <div className="progress-shimmer" style={{ position: 'absolute', inset: 0 }} />
               </div>
             </div>
 
@@ -519,8 +535,10 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                       <p style={{ color: 'var(--text-secondary)', fontWeight: 600, fontSize: '1rem' }}>
                         {uploadProgress.done} of {uploadProgress.total} evaluated
                       </p>
-                      <div style={{ width: '100%', maxWidth: 240, height: 6, background: 'var(--surface-2)', borderRadius: 9999, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', background: 'var(--accent)', borderRadius: 9999, width: `${(uploadProgress.done / uploadProgress.total) * 100}%`, transition: 'width 400ms ease' }} />
+                      <div style={{ width: '100%', maxWidth: 240, height: 6, background: 'var(--surface-2)', borderRadius: 9999, overflow: 'hidden', position: 'relative' }}>
+                        <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, background: 'var(--accent)', borderRadius: 9999, width: `${(uploadProgress.done / uploadProgress.total) * 100}%`, transition: 'width 400ms ease' }} />
+                        {uploadProgress.done === 0 && <div className="progress-indeterminate" />}
+                        <div className="progress-shimmer" style={{ position: 'absolute', inset: 0 }} />
                       </div>
                       <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>The AI is reading each file and comparing it to your job description.</p>
                     </>
