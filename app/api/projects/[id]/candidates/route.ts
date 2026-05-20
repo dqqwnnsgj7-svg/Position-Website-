@@ -59,7 +59,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         const { text, numPages } = await parsePdf(buffer);
         resumeTexts = numPages >= 2 ? await splitResumes(text) : [text];
       } else {
-        resumeTexts = [await parseFile(buffer, file.type, file.name)];
+        const text = await parseFile(buffer, file.type, file.name);
+        // Try splitting if the document is long enough to contain more than one resume
+        const lineCount = text.split('\n').length;
+        resumeTexts = lineCount >= 50 ? await splitResumes(text) : [text];
       }
 
       const isMulti = resumeTexts.length > 1;
